@@ -14,15 +14,24 @@ jobs:
       pull-requests: read
       issues: write
     steps:
-      - uses: actions/checkout@v6
+      - name: Fetch review credentials from Infisical
+        uses: Infisical/secrets-action@v1.0.16
         with:
-          persist-credentials: true
-          token: ${{ secrets.OPENCODE_PAT }}
+          method: oidc
+          oidc-audience: https://github.com/Confideleap-Partners
+          identity-id: 913b68ed-d188-405a-bfef-9161faaf4cec
+          project-slug: shared-ci
+          env-slug: prod
+          secret-path: /ci
+          secret-name: OPENROUTER_API_KEY
+          domain: https://infisical.confideleap.com
+
+      - uses: actions/checkout@v6
 
       - uses: anomalyco/opencode/github@latest
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.OPENCODE_PAT }}
+          OPENROUTER_API_KEY: ${{ env.OPENROUTER_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: deepseek/deepseek-v4-flash
           use_github_token: true

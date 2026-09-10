@@ -1,0 +1,112 @@
+name: Build Social Flow Image
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    outputs:
+      image_tag:
+        description: Immutable GHCR image tag
+        value: ${{ jobs.build.outputs.image_tag }}
+
+jobs:
+  build:
+    name: Validate, build, and push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Fetch GHCR credentials from Infisical
+        uses: Infisical/secrets-action@6cd3f7c0e4cc0d2395ee4ef414eb6eeb5d3e73db # v1.0.17
+        with:
+          method: oidc
+          oidc-audience: https://github.com/Confideleap-Partners
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          project-slug: social-flow
+          env-slug: ${{ inputs.environment }}
+          secret-path: /ci
+          secret-name: GHCR_PAT
+          domain: https://infisical.confideleap.com
+
+      - name: Fetch public build configuration from Infisical
+        uses: Infisical/secrets-action@6cd3f7c0e4cc0d2395ee4ef414eb6eeb5d3e73db # v1.0.17
+        with:
+          method: oidc
+          oidc-audience: https://github.com/Confideleap-Partners
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          project-slug: social-flow
+          env-slug: ${{ inputs.environment }}
+          secret-path: /
+          secret-name: NEXT_PUBLIC_BACKEND_URL
+          domain: https://infisical.confideleap.com
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@10.6.1 --activate
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22.20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build application
+        run: NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
+
+      - name: Run tests
+        run: pnpm test -- --runInBand
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: ci-placeholder-secret
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          IMAGE="ghcr.io/confideleap-partners/social-flow-${{ inputs.environment }}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "tag=$IMAGE:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ env.GHCR_PAT }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          push: true
+          cache-from: type=gha,scope=social-flow-${{ inputs.environment }}
+          cache-to: type=gha,mode=max,scope=social-flow-${{ inputs.environment }}
+          build-args: |
+            NEXT_PUBLIC_BACKEND_URL=${{ env.NEXT_PUBLIC_BACKEND_URL }}
+            NEXT_PUBLIC_VERSION=${{ github.sha }}
+          tags: |
+            ${{ steps.tag.outputs.tag }}
+            ${{ steps.tag.outputs.image }}:latest
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.tag.outputs.tag }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL

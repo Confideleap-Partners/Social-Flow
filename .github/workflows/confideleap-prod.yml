@@ -1,0 +1,18 @@
+name: Deploy Social Flow to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/confideleap-deploy.yml
+    with:
+      environment: prod
+      vps_user: prod-socialflow

@@ -1,0 +1,51 @@
+name: Social Flow Pre-Deployment Checks
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      vps_user:
+        required: true
+        type: string
+
+jobs:
+  checks:
+    name: Check VPS readiness
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Fetch deployment credentials from Infisical
+        uses: Infisical/secrets-action@6cd3f7c0e4cc0d2395ee4ef414eb6eeb5d3e73db # v1.0.17
+        with:
+          method: oidc
+          oidc-audience: https://github.com/Confideleap-Partners
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          project-slug: social-flow
+          env-slug: ${{ inputs.environment }}
+          secret-path: /ci
+          domain: https://infisical.confideleap.com
+
+      - name: Check capacity and dependencies
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ inputs.vps_user }}
+          key: ${{ env.VPS_SSH_KEY }}
+          command_timeout: 30s
+          script: |
+            set -e
+            AVAIL_GB=$(df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}')
+            AVAIL_MB=$(free -m | awk 'NR==2 {print $7}')
+            [ "$AVAIL_GB" -ge 8 ] || { echo "FAIL: less than 8GB disk available"; exit 1; }
+            [ "$AVAIL_MB" -ge 3072 ] || { echo "FAIL: less than 3GB memory available"; exit 1; }
+            docker info >/dev/null 2>&1 || { echo "FAIL: Docker is unavailable"; exit 1; }
+            docker compose version >/dev/null 2>&1 || { echo "FAIL: Docker Compose is unavailable"; exit 1; }
+            command -v infisical >/dev/null 2>&1 || { echo "FAIL: Infisical CLI is unavailable"; exit 1; }
+            test -f /var/www/social-flow-${{ inputs.environment }}/.infisical-credentials || {
+              echo "FAIL: .infisical-credentials is missing"; exit 1;
+            }
+            echo "PASS: VPS is ready (${AVAIL_GB}GB disk, ${AVAIL_MB}MB memory available)"

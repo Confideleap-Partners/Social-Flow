@@ -1,0 +1,186 @@
+name: Deploy Social Flow Application
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+      vps_user:
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-social-flow-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Fetch deployment credentials from Infisical
+        uses: Infisical/secrets-action@6cd3f7c0e4cc0d2395ee4ef414eb6eeb5d3e73db # v1.0.17
+        with:
+          method: oidc
+          oidc-audience: https://github.com/Confideleap-Partners
+          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
+          project-slug: social-flow
+          env-slug: ${{ inputs.environment }}
+          secret-path: /ci
+          domain: https://infisical.confideleap.com
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Prepare application directory
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ inputs.vps_user }}
+          key: ${{ env.VPS_SSH_KEY }}
+          command_timeout: 10s
+          script: mkdir -p /var/www/social-flow-${{ inputs.environment }}/deploy/temporal-dynamicconfig
+
+      - name: Copy deployment files
+        run: |
+          scp -i ~/.ssh/id_rsa deploy/docker-compose.yml \
+            "$VPS_USER@$VPS_HOST:/var/www/social-flow-$DEPLOY_ENV/deploy/docker-compose.yml"
+          scp -i ~/.ssh/id_rsa deploy/temporal-dynamicconfig/production-sql.yaml \
+            "$VPS_USER@$VPS_HOST:/var/www/social-flow-$DEPLOY_ENV/deploy/temporal-dynamicconfig/production-sql.yaml"
+        env:
+          DEPLOY_ENV: ${{ inputs.environment }}
+          VPS_USER: ${{ inputs.vps_user }}
+
+      - name: Render runtime environment on VPS
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        env:
+          DEPLOY_ENV: ${{ inputs.environment }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ inputs.vps_user }}
+          key: ${{ env.VPS_SSH_KEY }}
+          command_timeout: 3m
+          envs: DEPLOY_ENV,IMAGE_TAG
+          script: |
+            set -e
+            cd "/var/www/social-flow-${DEPLOY_ENV}"
+            set -a; . ./.infisical-credentials; set +a
+            export INFISICAL_DOMAIN=https://infisical.confideleap.com
+            export INFISICAL_API_URL=https://infisical.confideleap.com/api
+            INFISICAL_TOKEN=$(infisical login --method=universal-auth \
+              --client-id="$INFISICAL_UNIVERSAL_AUTH_CLIENT_ID" \
+              --client-secret="$INFISICAL_UNIVERSAL_AUTH_CLIENT_SECRET" --silent --plain)
+            export INFISICAL_TOKEN
+            infisical export --silent --expand=false --format=dotenv \
+              --projectId="$INFISICAL_PROJECT_ID" --env="$DEPLOY_ENV" \
+              > .env.new < /dev/null
+            printf 'IMAGE_TAG=%s\nDEPLOY_ENV=%s\n' "$IMAGE_TAG" "$DEPLOY_ENV" >> .env.new
+            mv .env.new .env
+            chmod 600 .env
+
+      - name: Log in to GHCR and pull image
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        env:
+          GHCR_PAT: ${{ env.GHCR_PAT }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ inputs.vps_user }}
+          key: ${{ env.VPS_SSH_KEY }}
+          command_timeout: 10m
+          envs: GHCR_PAT,IMAGE_TAG
+          script: |
+            set -e
+            echo "$GHCR_PAT" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+            timeout 600 docker pull "$IMAGE_TAG"
+
+      - name: Start services
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ inputs.vps_user }}
+          key: ${{ env.VPS_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -e
+            cd /var/www/social-flow-${{ inputs.environment }}
+            docker network inspect traefik-public >/dev/null 2>&1 || docker network create traefik-public
+            docker compose --env-file .env -f deploy/docker-compose.yml up -d postgres redis temporal
+            docker compose --env-file .env -f deploy/docker-compose.yml run --rm --no-deps app \
+              pnpm dlx prisma@6.5.0 db push \
+              --schema ./libraries/nestjs-libraries/src/database/prisma/schema.prisma
+            APP_ID=$(docker compose --env-file .env -f deploy/docker-compose.yml ps -q app)
+            if [ -n "$APP_ID" ]; then
+              docker inspect --format='{{.Config.Image}}' "$APP_ID" > .previous-image
+            else
+              rm -f .previous-image
+            fi
+            docker compose --env-file .env -f deploy/docker-compose.yml up -d --remove-orphans
+
+      - name: Verify application health
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ inputs.vps_user }}
+          key: ${{ env.VPS_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            cd /var/www/social-flow-${{ inputs.environment }}
+            for i in $(seq 1 48); do
+              APP_ID=$(docker compose --env-file .env -f deploy/docker-compose.yml ps -q app)
+              STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$APP_ID" 2>/dev/null || true)
+              [ "$STATUS" = healthy ] && { echo "Social Flow is healthy"; exit 0; }
+              [ "$STATUS" = unhealthy ] && break
+              echo "Attempt $i/48: application is ${STATUS:-not running}"
+              sleep 5
+            done
+            docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=150 app
+            if [ -s .previous-image ]; then
+              PREVIOUS_IMAGE=$(cat .previous-image)
+              echo "Health check failed; restoring $PREVIOUS_IMAGE"
+              while IFS= read -r line; do
+                case "$line" in
+                  IMAGE_TAG=*) printf 'IMAGE_TAG=%s\n' "$PREVIOUS_IMAGE" ;;
+                  *) printf '%s\n' "$line" ;;
+                esac
+              done < .env > .env.rollback
+              mv .env.rollback .env
+              chmod 600 .env
+              docker compose --env-file .env -f deploy/docker-compose.yml up -d app
+              for i in $(seq 1 48); do
+                APP_ID=$(docker compose --env-file .env -f deploy/docker-compose.yml ps -q app)
+                STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$APP_ID" 2>/dev/null || true)
+                [ "$STATUS" = healthy ] && { echo "Previous release restored"; exit 1; }
+                sleep 5
+              done
+              echo "Rollback failed to become healthy"
+            fi
+            exit 1
+
+      - name: Prune old images
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ inputs.vps_user }}
+          key: ${{ env.VPS_SSH_KEY }}
+          command_timeout: 30s
+          script: docker image prune -af --filter "until=24h" || true

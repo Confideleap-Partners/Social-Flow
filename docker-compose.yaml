@@ -1,7 +1,7 @@
 services:
   postiz:
-    # image: ghcr.io/gitroomhq/postiz-app:latest
-    build: "."
+    image: ghcr.io/confideleap-partners/social-flow:sha-62832b4
+    #build: "."
     container_name: postiz
     restart: always
     environment:
@@ -9,7 +9,7 @@ services:
       # automatically); otherwise the inline default below is used.
       # === Required Settings
       MAIN_URL: '${MAIN_URL:-http://localhost:4007}'
-      FRONTEND_URL: '${FRONTEND_URL:-http://localhost:4007}'
+      FRONTEND_URL: '${:-http://localhost:4007}'
       NEXT_PUBLIC_BACKEND_URL: '${NEXT_PUBLIC_BACKEND_URL:-http://localhost:4007/api}'
       JWT_SECRET: '${JWT_SECRET:-random string that is unique to every install - just type random characters here!}'
       DATABASE_URL: '${POSTIZ_DATABASE_URL:-postgresql://postiz-user:postiz-password@postiz-postgres:5432/postiz-db-local}'

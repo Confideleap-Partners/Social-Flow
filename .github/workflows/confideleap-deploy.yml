@@ -1,0 +1,39 @@
+name: Social Flow Deployment Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      vps_user:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build Docker image
+    uses: ./.github/workflows/confideleap-build-image.yml
+    with:
+      environment: ${{ inputs.environment }}
+
+  checks:
+    name: Pre-deployment checks
+    uses: ./.github/workflows/confideleap-pre-deploy-checks.yml
+    with:
+      environment: ${{ inputs.environment }}
+      vps_user: ${{ inputs.vps_user }}
+
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    needs: [build, checks]
+    uses: ./.github/workflows/confideleap-deploy-app.yml
+    with:
+      environment: ${{ inputs.environment }}
+      image_tag: ${{ needs.build.outputs.image_tag }}
+      vps_user: ${{ inputs.vps_user }}

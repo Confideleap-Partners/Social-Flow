@@ -37,6 +37,15 @@ jobs:
           secret-name: GHCR_PAT
           domain: https://infisical.confideleap.com
 
+      - name: Verify GHCR token was fetched
+        shell: bash
+        run: |
+          if [[ -z "${GHCR_PAT:-}" ]]; then
+            echo "::error::GHCR_PAT was not fetched from Infisical"
+            exit 1
+          fi
+          echo "GHCR_PAT was fetched successfully"
+
       - name: Fetch public build configuration from Infisical
         uses: Infisical/secrets-action@6cd3f7c0e4cc0d2395ee4ef414eb6eeb5d3e73db # v1.0.17
         with:

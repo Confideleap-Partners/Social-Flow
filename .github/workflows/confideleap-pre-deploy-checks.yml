@@ -29,6 +29,20 @@ jobs:
           secret-path: /ci
           domain: https://infisical.confideleap.com
 
+      - name: Verify VPS credentials were fetched
+        shell: bash
+        run: |
+          missing=0
+          for name in VPS_HOST VPS_SSH_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::$name was not fetched from Infisical"
+              missing=1
+            else
+              echo "$name was fetched successfully"
+            fi
+          done
+          exit "$missing"
+
       - name: Check capacity and dependencies
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:

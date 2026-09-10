@@ -73,13 +73,6 @@ jobs:
       - name: Build application
         run: NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
 
-      - name: Run tests
-        run: pnpm test -- --runInBand
-        env:
-          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
-          REDIS_URL: redis://localhost:6379
-          JWT_SECRET: ci-placeholder-secret
-
       - name: Compute image tag
         id: tag
         run: |

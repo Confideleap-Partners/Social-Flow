@@ -13,22 +13,17 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: ${POSTIZ_DATABASE_URL:?POSTIZ_DATABASE_URL must be set}
-      REDIS_URL: redis://redis:6379
-      TEMPORAL_ADDRESS: temporal:7233
+      REDIS_URL: ${POSTIZ_REDIS_URL:-redis://postiz-redis:6379}
+      TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:-temporal:7233}
       UPLOAD_DIRECTORY: /uploads
       NEXT_PUBLIC_UPLOAD_DIRECTORY: /uploads
     init: true
     restart: unless-stopped
+    ports:
+      - '${APP_PORT:-4007}:5000'
     volumes:
       - uploads:/uploads
       - config:/config
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      temporal:
-        condition: service_healthy
     healthcheck:
       test:
         [
@@ -42,7 +37,8 @@ services:
       retries: 24
       start_period: 60s
     networks:
-      - default
+      - postiz
+      - temporal
       - traefik-public
     labels:
       - 'traefik.enable=true'
@@ -52,101 +48,20 @@ services:
       - 'traefik.http.routers.social-flow-${DEPLOY_ENV}.entrypoints=websecure'
       - 'traefik.http.services.social-flow-${DEPLOY_ENV}.loadbalancer.server.port=5000'
 
-  postgres:
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postiz-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
-      POSTGRES_DB: ${POSTGRES_DB:-postiz}
-    restart: unless-stopped
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  redis:
-    image: redis:7.2-alpine
-    command: redis-server --appendonly yes --maxmemory ${REDIS_MAXMEMORY:-256mb} --maxmemory-policy allkeys-lru
-    restart: unless-stopped
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  temporal-postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: ${TEMPORAL_POSTGRES_PASSWORD:-temporal}
-    restart: unless-stopped
-    volumes:
-      - temporal_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U temporal']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  temporal-elasticsearch:
-    image: elasticsearch:7.17.27
-    environment:
-      discovery.type: single-node
-      ES_JAVA_OPTS: -Xms256m -Xmx256m
-      xpack.security.enabled: 'false'
-    restart: unless-stopped
-    volumes:
-      - temporal_elasticsearch_data:/usr/share/elasticsearch/data
-    healthcheck:
-      test:
-        [
-          'CMD-SHELL',
-          'curl --fail --silent http://localhost:9200/_cluster/health >/dev/null',
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-
-  temporal:
-    image: temporalio/auto-setup:1.28.1
-    environment:
-      DB: postgres12
-      DB_PORT: 5432
-      POSTGRES_USER: temporal
-      POSTGRES_PWD: ${TEMPORAL_POSTGRES_PASSWORD:-temporal}
-      POSTGRES_SEEDS: temporal-postgres
-      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/production-sql.yaml
-      ENABLE_ES: 'true'
-      ES_SEEDS: temporal-elasticsearch
-      ES_VERSION: v7
-      DEFAULT_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
-    restart: unless-stopped
-    volumes:
-      - ./temporal-dynamicconfig:/etc/temporal/config/dynamicconfig:ro
-    depends_on:
-      temporal-postgres:
-        condition: service_healthy
-      temporal-elasticsearch:
-        condition: service_healthy
-    healthcheck:
-      test: ['CMD-SHELL', 'tctl --address $$(hostname -i):7233 cluster health']
-      interval: 10s
-      timeout: 5s
-      retries: 30
-
 volumes:
   config:
-  postgres_data:
-  redis_data:
-  temporal_elasticsearch_data:
-  temporal_postgres_data:
+    external: true
+    name: ${POSTIZ_CONFIG_VOLUME:-social-flow_postiz-config}
   uploads:
+    external: true
+    name: ${POSTIZ_UPLOADS_VOLUME:-social-flow_postiz-uploads}
 
 networks:
+  postiz:
+    external: true
+    name: ${POSTIZ_NETWORK:-social-flow_postiz-network}
+  temporal:
+    external: true
+    name: ${TEMPORAL_NETWORK:-temporal-network}
   traefik-public:
     external: true

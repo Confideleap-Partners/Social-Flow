@@ -26,5 +26,6 @@ COPY var/docker/nginx.conf /etc/nginx/nginx.conf
 
 RUN pnpm install
 RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
+RUN CI=true pnpm prune --prod --ignore-scripts
 
 CMD ["sh", "-c", "nginx && pnpm run pm2"]

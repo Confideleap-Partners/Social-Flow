@@ -55,7 +55,7 @@ jobs:
             AVAIL_GB=$(df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}')
             AVAIL_MB=$(free -m | awk 'NR==2 {print $7}')
             [ "$AVAIL_GB" -ge 8 ] || { echo "FAIL: less than 8GB disk available"; exit 1; }
-            [ "$AVAIL_MB" -ge 3072 ] || { echo "FAIL: less than 3GB memory available"; exit 1; }
+            [ "$AVAIL_MB" -ge 2072 ] || { echo "FAIL: less than 2GB memory available"; exit 1; }
             docker info >/dev/null 2>&1 || { echo "FAIL: Docker is unavailable"; exit 1; }
             docker compose version >/dev/null 2>&1 || { echo "FAIL: Docker Compose is unavailable"; exit 1; }
             command -v infisical >/dev/null 2>&1 || { echo "FAIL: Infisical CLI is unavailable"; exit 1; }

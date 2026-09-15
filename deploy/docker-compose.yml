@@ -9,7 +9,7 @@ services:
         '-c',
         'nginx && (pm2 delete all || true) && pnpm run --parallel pm2 && pm2 logs',
       ]
-    env_file: ../.env
+    env_file: .env
     environment:
       NODE_ENV: production
       DATABASE_URL: ${POSTIZ_DATABASE_URL:?POSTIZ_DATABASE_URL must be set}

@@ -46,18 +46,6 @@ jobs:
           fi
           echo "GHCR_PAT was fetched successfully"
 
-      - name: Fetch public build configuration from Infisical
-        uses: Infisical/secrets-action@6cd3f7c0e4cc0d2395ee4ef414eb6eeb5d3e73db # v1.0.17
-        with:
-          method: oidc
-          oidc-audience: https://github.com/Confideleap-Partners
-          identity-id: ${{ vars.INFISICAL_IDENTITY_ID }}
-          project-slug: social-flow
-          env-slug: ${{ inputs.environment }}
-          secret-path: /
-          secret-name: NEXT_PUBLIC_BACKEND_URL
-          domain: https://infisical.confideleap.com
-
       - name: Enable pnpm
         run: corepack enable && corepack prepare pnpm@10.6.1 --activate
 
@@ -98,7 +86,6 @@ jobs:
           cache-from: type=gha,scope=social-flow-${{ inputs.environment }}
           cache-to: type=gha,mode=max,scope=social-flow-${{ inputs.environment }}
           build-args: |
-            NEXT_PUBLIC_BACKEND_URL=${{ env.NEXT_PUBLIC_BACKEND_URL }}
             NEXT_PUBLIC_VERSION=${{ github.sha }}
           tags: |
             ${{ steps.tag.outputs.tag }}

@@ -218,7 +218,7 @@ services:
   temporal:
     container_name: temporal
     ports:
-      - '7233:7233'
+      - '7234:7233'
     image: temporalio/auto-setup:1.28.1
     depends_on:
       - temporal-postgresql

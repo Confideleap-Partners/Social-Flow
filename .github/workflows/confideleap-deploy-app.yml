@@ -89,10 +89,12 @@ jobs:
             export INFISICAL_TOKEN
             infisical export --silent --expand=false --format=dotenv \
               --projectId="$INFISICAL_PROJECT_ID" --env="$DEPLOY_ENV" \
-              > .env.new < /dev/null
-            printf 'IMAGE_TAG=%s\nDEPLOY_ENV=%s\n' "$IMAGE_TAG" "$DEPLOY_ENV" >> .env.new
-            mv .env.new .env
-            chmod 600 .env
+              > deploy/.env.new < /dev/null
+            sed -E "s/^([A-Za-z_][A-Za-z0-9_]*)='(.*)'$/\1=\2/" deploy/.env.new > deploy/.env.stripped
+            mv deploy/.env.stripped deploy/.env.new
+            printf 'IMAGE_TAG=%s\nDEPLOY_ENV=%s\n' "$IMAGE_TAG" "$DEPLOY_ENV" >> deploy/.env.new
+            mv deploy/.env.new deploy/.env
+            chmod 600 deploy/.env
 
       - name: Log in to GHCR and pull image
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
@@ -130,11 +132,11 @@ jobs:
                 exit 1
               }
             done
-            docker compose --env-file .env -f deploy/docker-compose.yml config --quiet
-            docker compose --env-file .env -f deploy/docker-compose.yml run --rm --no-deps app \
+            docker compose --env-file deploy/.env -f deploy/docker-compose.yml config --quiet
+            docker compose --env-file deploy/.env -f deploy/docker-compose.yml run --rm --no-deps app \
               pnpm dlx prisma@6.5.0 db push \
               --schema ./libraries/nestjs-libraries/src/database/prisma/schema.prisma
-            APP_ID=$(docker compose --env-file .env -f deploy/docker-compose.yml ps -q app)
+            APP_ID=$(docker compose --env-file deploy/.env -f deploy/docker-compose.yml ps -q app)
             if [ -n "$APP_ID" ]; then
               docker inspect --format='{{.Config.Image}}' "$APP_ID" > .previous-image
               printf 'compose\n' > .previous-deployment-type
@@ -149,7 +151,7 @@ jobs:
               STATUS=$?
               if [ "$LEGACY_STOPPED" = 1 ]; then
                 echo "Cutover failed; restarting legacy postiz container"
-                docker compose --env-file .env -f deploy/docker-compose.yml stop app 2>/dev/null || true
+                docker compose --env-file deploy/.env -f deploy/docker-compose.yml stop app 2>/dev/null || true
                 docker start postiz || true
               fi
               exit "$STATUS"
@@ -159,7 +161,7 @@ jobs:
               docker stop postiz
               LEGACY_STOPPED=1
             fi
-            docker compose --env-file .env -f deploy/docker-compose.yml up -d --remove-orphans
+            docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --remove-orphans
             trap - ERR
 
       - name: Verify application health
@@ -173,19 +175,19 @@ jobs:
             set -e
             cd /var/www/social-flow-${{ inputs.environment }}
             for i in $(seq 1 48); do
-              APP_ID=$(docker compose --env-file .env -f deploy/docker-compose.yml ps -q app)
+              APP_ID=$(docker compose --env-file deploy/.env -f deploy/docker-compose.yml ps -q app)
               STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$APP_ID" 2>/dev/null || true)
               [ "$STATUS" = healthy ] && { echo "Social Flow is healthy"; exit 0; }
               [ "$STATUS" = unhealthy ] && break
               echo "Attempt $i/48: application is ${STATUS:-not running}"
               sleep 5
             done
-            docker compose --env-file .env -f deploy/docker-compose.yml logs --tail=150 app
+            docker compose --env-file deploy/.env -f deploy/docker-compose.yml logs --tail=150 app
             if [ -s .previous-image ]; then
               PREVIOUS_IMAGE=$(cat .previous-image)
               echo "Health check failed; restoring $PREVIOUS_IMAGE"
               if [ "$(cat .previous-deployment-type 2>/dev/null)" = legacy ]; then
-                docker compose --env-file .env -f deploy/docker-compose.yml stop app
+                docker compose --env-file deploy/.env -f deploy/docker-compose.yml stop app
                 docker start postiz
                 for i in $(seq 1 24); do
                   if docker exec postiz node -e \
@@ -202,13 +204,13 @@ jobs:
                     IMAGE_TAG=*) printf 'IMAGE_TAG=%s\n' "$PREVIOUS_IMAGE" ;;
                     *) printf '%s\n' "$line" ;;
                   esac
-                done < .env > .env.rollback
-                mv .env.rollback .env
-                chmod 600 .env
-                docker compose --env-file .env -f deploy/docker-compose.yml up -d app
+                done < deploy/.env > deploy/.env.rollback
+                mv deploy/.env.rollback deploy/.env
+                chmod 600 deploy/.env
+                docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d app
               fi
               for i in $(seq 1 48); do
-                APP_ID=$(docker compose --env-file .env -f deploy/docker-compose.yml ps -q app)
+                APP_ID=$(docker compose --env-file deploy/.env -f deploy/docker-compose.yml ps -q app)
                 STATUS=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$APP_ID" 2>/dev/null || true)
                 [ "$STATUS" = healthy ] && { echo "Previous release restored"; exit 1; }
                 sleep 5

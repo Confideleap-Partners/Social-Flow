@@ -23,6 +23,10 @@ import { Organization } from '@prisma/client';
 import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
 import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
+import { CreateTagDto } from '@gitroom/nestjs-libraries/dtos/posts/create.tag.dto';
+import { SaveMediaInformationDto } from '@gitroom/nestjs-libraries/dtos/media/save.media.information.dto';
+import { SetsService } from '@gitroom/nestjs-libraries/database/prisma/sets/sets.service';
+import { SetsDto } from '@gitroom/nestjs-libraries/dtos/sets/sets.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/media.service';
@@ -76,6 +80,7 @@ export class PublicIntegrationsController {
     private _integrationService: IntegrationService,
     private _postsService: PostsService,
     private _mediaService: MediaService,
+    private _setsService: SetsService,
     private _notificationService: NotificationService,
     private _integrationManager: IntegrationManager,
     private _refreshIntegrationService: RefreshIntegrationService,
@@ -266,6 +271,209 @@ export class PublicIntegrationsController {
       : 'API';
 
     return this._postsService.createPost(org.id, body, creationMethod);
+  }
+
+  @Get('/posts/tags')
+  async listTags(@GetOrgFromRequest() org: Organization) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._postsService.getTags(org.id);
+  }
+
+  @Post('/posts/tags')
+  async createTag(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: CreateTagDto
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._postsService.createTag(org.id, body);
+  }
+
+  @Put('/posts/tags/:id')
+  async editTag(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: CreateTagDto,
+    @Param('id') id: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._postsService.editTag(id, org.id, body);
+  }
+
+  @Delete('/posts/tags/:id')
+  async deleteTag(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._postsService.deleteTag(id, org.id);
+  }
+
+  @Get('/posts/sets')
+  async listSets(@GetOrgFromRequest() org: Organization) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._setsService.getSets(org.id);
+  }
+
+  @Post('/posts/sets')
+  async createSet(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: SetsDto
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._setsService.createSet(org.id, body);
+  }
+
+  @Delete('/posts/sets/:id')
+  async deleteSet(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._setsService.deleteSet(org.id, id);
+  }
+
+  @Get('/media')
+  async listMedia(
+    @GetOrgFromRequest() org: Organization,
+    @Query('page') page: number,
+    @Query('search') search?: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._mediaService.getMedia(org.id, Math.max(1, Number(page) || 1), search);
+  }
+
+  @Post('/media/information')
+  async updateMediaInformation(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: { mediaId: string; alt?: string; caption?: string }
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    if (!body?.mediaId) {
+      throw new HttpException({ msg: 'mediaId is required' }, 400);
+    }
+    return this._mediaService.saveMediaInformation(org.id, {
+      id: body.mediaId,
+      alt: body.alt ?? '',
+    } as SaveMediaInformationDto);
+  }
+
+  @Delete('/media/:id')
+  async deleteMedia(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._mediaService.deleteMedia(org.id, id);
+  }
+
+  @Get('/posts/:id')
+  async getPostById(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    const post = await this._postsService.getPost(org.id, id);
+    if (!post?.posts?.length) {
+      throw new HttpException({ msg: 'Post not found' }, 404);
+    }
+    return post;
+  }
+
+  @Get('/posts/:id/comments')
+  async getPostComments(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    const post = await this._postsService.getPost(org.id, id);
+    if (!post?.posts?.length) {
+      throw new HttpException({ msg: 'Post not found' }, 404);
+    }
+    return this._postsService.getComments(id);
+  }
+
+  @Put('/posts/:id')
+  async updatePost(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() rawBody: any
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+
+    // Simplified body (content/integrations/media) is expanded into the native
+    // posts payload from the existing group so every channel is updated in place.
+    if (!rawBody?.posts) {
+      const existing = await this._postsService.getPost(org.id, id);
+      if (!existing?.posts?.length) {
+        throw new HttpException({ msg: 'Post not found' }, 404);
+      }
+      rawBody = {
+        type: rawBody?.type || 'schedule',
+        date:
+          rawBody?.date ||
+          new Date(existing.posts[0].publishDate).toISOString(),
+        shortLink: rawBody?.shortLink ?? false,
+        tags: rawBody?.tags || [],
+        posts: existing.posts.map((p) => ({
+          integration: { id: p.integration?.id },
+          value: [
+            {
+              id: p.id,
+              content: rawBody?.content ?? p.content ?? '',
+              delay: p.delay ?? 0,
+              image: rawBody?.media ?? p.image ?? [],
+            },
+          ],
+        })),
+      };
+    }
+
+    if (!rawBody.date) {
+      const existing = await this._postsService
+        .getPost(org.id, id)
+        .catch(() => null);
+      rawBody.date = existing?.posts?.[0]?.publishDate
+        ? new Date(existing.posts[0].publishDate).toISOString()
+        : new Date().toISOString();
+    }
+
+    const body = await this._postsService.mapTypeToPost(rawBody, org.id, true);
+    body.type = rawBody.type || 'schedule';
+
+    const validation = await this._postsService.validatePosts(
+      org.id,
+      body.posts
+    );
+
+    const fail = (item: (typeof validation)[number], error: string) => {
+      throw new PostValidationException({
+        provider: item.identifier,
+        name: item.name,
+        error,
+      });
+    };
+
+    for (const item of validation) {
+      if (item.emptyContent) {
+        fail(
+          item,
+          'Your post should have at least one character or one image.'
+        );
+      }
+    }
+
+    for (const item of validation) {
+      if (!item.valid) {
+        fail(item, item.settingsError || 'Please fix your settings');
+      }
+      if (item.errors !== true) {
+        fail(item, item.errors as string);
+      }
+      if (item.tooLong) {
+        fail(item, 'post is too long, please fix it');
+      }
+    }
+
+    return this._postsService.createPost(org.id, body, 'API');
   }
 
   @Delete('/posts/:id')

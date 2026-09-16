@@ -441,7 +441,10 @@ export const AddProviderComponent: FC<{
             )
           ).json();
           modal.openModal({
-            title: `Add ${capitalize(identifier)}`,
+            title: `Add ${
+              social.find((p) => p.identifier === identifier)?.name ||
+              capitalize(identifier)
+            }`,
             withCloseButton: true,
             ...(isMobile ? { removeLayout: true, fullScreen: true } : {}),
             classNames: {

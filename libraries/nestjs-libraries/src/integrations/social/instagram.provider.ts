@@ -29,7 +29,7 @@ export class InstagramProvider
   implements SocialProvider
 {
   identifier = 'instagram';
-  name = 'Instagram\n(Facebook Business)';
+  name = 'Instagram';
   isBetweenSteps = true;
   toolTip = 'Instagram must be business and connected to a Facebook page';
   scopes = [

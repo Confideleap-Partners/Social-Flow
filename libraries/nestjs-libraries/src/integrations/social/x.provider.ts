@@ -1,4 +1,4 @@
-import { TweetV2, TwitterApi } from 'twitter-api-v2';
+import { TweetV2, TwitterApi, UserV2 } from 'twitter-api-v2';
 import { createHmac, randomBytes } from 'crypto';
 import { parseFragment } from 'parse5';
 import {
@@ -9,6 +9,7 @@ import {
   PostResponse,
   SocialProvider,
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
+import type { PlatformComment } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
 import { lookup } from 'mime-types';
 import sharp from 'sharp';
 import { readOrFetch } from '@gitroom/helpers/utils/read.or.fetch';
@@ -503,6 +504,53 @@ export class XProvider extends SocialAbstract implements SocialProvider {
         .map((k) => `${pct(k)}="${pct(params[k])}"`)
         .join(', ')
     );
+  }
+
+  // Live proxy for the conversation replies of a published tweet. Uses the
+  // recent-search endpoint, so only replies from the last 7 days are returned
+  // and the X app needs read access (search) for the connected account.
+  async getComments(
+    accessToken: string,
+    platformPostId: string,
+    integration: Integration
+  ): Promise<PlatformComment[]> {
+    const [accessTokenSplit, accessSecretSplit] = integration.token.split(':');
+    const client = new TwitterApi({
+      appKey: process.env.X_API_KEY!,
+      appSecret: process.env.X_API_SECRET!,
+      accessToken: accessTokenSplit,
+      accessSecret: accessSecretSplit,
+    });
+
+    const response = await client.v2.get('tweets/search/recent', {
+      query: `conversation_id:${platformPostId}`,
+      max_results: 50,
+      'tweet.fields': 'created_at,public_metrics,author_id,conversation_id',
+      expansions: 'author_id',
+      'user.fields': 'name,username,profile_image_url',
+    });
+
+    const users = new Map(
+      ((response.includes?.users || []) as UserV2[]).map((user) => [
+        user.id,
+        user,
+      ])
+    );
+
+    return (response.data || [])
+      .map((tweet) => {
+        const user = users.get(tweet.author_id);
+        return {
+          id: tweet.id,
+          text: tweet.text,
+          author: user?.name,
+          username: user?.username,
+          authorAvatar: user?.profile_image_url,
+          createdAt: tweet.created_at,
+          likes: tweet.public_metrics?.like_count,
+        };
+      })
+      .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
   }
 
   // X's v2 chunked upload requires a Buffer per APPEND segment, so we read one

@@ -2,6 +2,7 @@ import {
   AnalyticsData,
   AuthTokenDetails,
   PendingCheckResponse,
+  PlatformComment,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -500,6 +501,36 @@ export class ThreadsProvider extends SocialAbstract implements SocialProvider {
         pendingData: { step: 'container', containerId },
       },
     ];
+  }
+
+  // Live proxy for the replies of a published thread. Threads only exposes
+  // one nesting level, so nested replies are surfaced flat with an id ref.
+  async getComments(
+    accessToken: string,
+    platformPostId: string,
+    integration: Integration
+  ): Promise<PlatformComment[]> {
+    const response = await this.fetch(
+      `https://graph.threads.net/v1.0/${platformPostId}/replies?fields=id,text,timestamp,username,like_count,has_replies&access_token=${accessToken}`
+    );
+    const json = (await response.json()) as {
+      data?: Array<{
+        id: string;
+        text?: string;
+        timestamp?: string;
+        username?: string;
+        like_count?: number;
+        has_replies?: boolean;
+      }>;
+    };
+
+    return (json.data || []).map((reply) => ({
+      id: reply.id,
+      text: reply.text || '',
+      username: reply.username,
+      createdAt: reply.timestamp,
+      likes: reply.like_count,
+    }));
   }
 
   override async checkPostStatus(

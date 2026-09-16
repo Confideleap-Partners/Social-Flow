@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  PlatformComment,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -204,6 +205,51 @@ export class InstagramStandaloneProvider
       integration,
       'graph.instagram.com'
     );
+  }
+
+  // Live proxy for the comments of a published IG media, same shape as the
+  // business provider but served by graph.instagram.com with the IG token.
+  async getComments(
+    accessToken: string,
+    platformPostId: string,
+    integration: Integration
+  ): Promise<PlatformComment[]> {
+    const response = await this.fetch(
+      `https://graph.instagram.com/v21.0/${platformPostId}/comments?fields=id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}&limit=100&access_token=${accessToken}`
+    );
+    const json = (await response.json()) as {
+      data?: Array<{
+        id: string;
+        text?: string;
+        timestamp?: string;
+        username?: string;
+        like_count?: number;
+        replies?: {
+          data?: Array<{
+            id: string;
+            text?: string;
+            timestamp?: string;
+            username?: string;
+            like_count?: number;
+          }>;
+        };
+      }>;
+    };
+
+    return (json.data || []).map((comment) => ({
+      id: comment.id,
+      text: comment.text || '',
+      username: comment.username,
+      createdAt: comment.timestamp,
+      likes: comment.like_count,
+      replies: (comment.replies?.data || []).map((reply) => ({
+        id: reply.id,
+        text: reply.text || '',
+        username: reply.username,
+        createdAt: reply.timestamp,
+        likes: reply.like_count,
+      })),
+    }));
   }
 
   // the graph domain travels inside pendingData, so these are pure delegations

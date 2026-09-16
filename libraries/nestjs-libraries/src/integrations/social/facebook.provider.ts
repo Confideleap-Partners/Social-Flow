@@ -2,6 +2,7 @@ import {
   AnalyticsData,
   AuthTokenDetails,
   PendingCheckResponse,
+  PlatformComment,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -564,6 +565,38 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     }
 
     return this.postNonStory(id, accessToken, postDetails);
+  }
+
+  // Live proxy for the comments of a published page post. The integration
+  // token is the page access token saved on connect, so page post comments
+  // are readable without any extra token exchange.
+  async getComments(
+    accessToken: string,
+    platformPostId: string,
+    integration: Integration
+  ): Promise<PlatformComment[]> {
+    const response = await this.fetch(
+      `https://graph.facebook.com/v20.0/${platformPostId}/comments?fields=id,message,created_time,from{id,name,picture.type(large)},like_count&limit=100&access_token=${accessToken}`
+    );
+    const json = (await response.json()) as {
+      data?: Array<{
+        id: string;
+        message?: string;
+        created_time?: string;
+        like_count?: number;
+        from?: { id: string; name?: string; picture?: { data?: { url?: string } } };
+      }>;
+    };
+
+    return (json.data || []).map((comment) => ({
+      id: comment.id,
+      text: comment.message || '',
+      author: comment.from?.name,
+      username: comment.from?.id,
+      authorAvatar: comment.from?.picture?.data?.url,
+      createdAt: comment.created_time,
+      likes: comment.like_count,
+    }));
   }
 
   override async checkPostStatus(

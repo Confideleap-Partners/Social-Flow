@@ -378,6 +378,9 @@ export class PublicIntegrationsController {
     return post;
   }
 
+  // Pure proxy for the platform comments of a published post: the stored
+  // releaseId (platform post id) is looked up and the provider integration
+  // fetches the live comments. Nothing is persisted here.
   @Get('/posts/:id/comments')
   async getPostComments(
     @GetOrgFromRequest() org: Organization,
@@ -385,10 +388,41 @@ export class PublicIntegrationsController {
   ) {
     Sentry.metrics.count('public_api-request', 1);
     const post = await this._postsService.getPost(org.id, id);
-    if (!post?.posts?.length) {
+    const [root] = post?.posts || [];
+    if (!root) {
       throw new HttpException({ msg: 'Post not found' }, 404);
     }
-    return this._postsService.getComments(id);
+
+    const provider = this._integrationManager.getSocialIntegration(
+      root.integration.providerIdentifier
+    );
+
+    if (!provider?.getComments) {
+      throw new HttpException(
+        { msg: 'Comments are not supported for this platform' },
+        400
+      );
+    }
+
+    if (!root.releaseId) {
+      throw new HttpException(
+        { msg: 'Comments are only available for published posts' },
+        400
+      );
+    }
+
+    try {
+      return await provider.getComments(
+        root.integration.token,
+        root.releaseId,
+        root.integration
+      );
+    } catch (err: any) {
+      throw new HttpException(
+        { msg: err?.message || 'Failed to fetch comments' },
+        502
+      );
+    }
   }
 
   @Put('/posts/:id')

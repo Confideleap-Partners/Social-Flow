@@ -1,6 +1,7 @@
 import {
   AuthTokenDetails,
   PendingCheckResponse,
+  PlatformComment,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -881,6 +882,52 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
         } as LinkedinPendingData,
       },
     ];
+  }
+
+  // Live proxy for the comments of a published post (personal and, via the
+  // page provider, organization URNs). The platformPostId is the full URN
+  // (urn:li:share:... / urn:li:ugcPost:...) stored as releaseId.
+  async getComments(
+    accessToken: string,
+    platformPostId: string,
+    integration: Integration
+  ): Promise<PlatformComment[]> {
+    const response = await this.fetch(
+      `https://api.linkedin.com/rest/socialActions/${encodeURIComponent(
+        platformPostId
+      )}/comments?count=100`,
+      {
+        headers: {
+          'LinkedIn-Version': '202601',
+          'X-Restli-Protocol-Version': '2.0.0',
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    const json = (await response.json()) as {
+      elements?: Array<Record<string, any>>;
+    };
+
+    const extractText = (comment: Record<string, any>): string => {
+      if (typeof comment?.comment === 'string') return comment.comment;
+      if (typeof comment?.content === 'string') return comment.content;
+      if (typeof comment?.content?.comment === 'string')
+        return comment.content.comment;
+      if (typeof comment?.payload?.message === 'string')
+        return comment.payload.message;
+      return '';
+    };
+
+    return (json.elements || []).map((comment) => ({
+      id: String(comment.id || comment.object || ''),
+      text: extractText(comment),
+      username: String(comment.actor || '').split(':').pop() || undefined,
+      createdAt: comment.created?.time
+        ? new Date(comment.created.time).toISOString()
+        : undefined,
+      likes: comment.likesSummary?.totalLikes,
+    }));
   }
 
   override async checkPostStatus(

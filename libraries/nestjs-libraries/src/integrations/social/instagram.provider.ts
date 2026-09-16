@@ -2,6 +2,7 @@ import {
   AnalyticsData,
   AuthTokenDetails,
   PendingCheckResponse,
+  PlatformComment,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -756,6 +757,52 @@ export class InstagramProvider
         },
       },
     ];
+  }
+
+  // Live proxy for the comments of a published IG media. The integration
+  // token is the page/IG token saved on connect. Top-level comments include
+  // their nested replies.
+  async getComments(
+    accessToken: string,
+    platformPostId: string,
+    integration: Integration
+  ): Promise<PlatformComment[]> {
+    const response = await this.fetch(
+      `https://graph.facebook.com/v20.0/${platformPostId}/comments?fields=id,text,timestamp,username,like_count,replies{id,text,timestamp,username,like_count}&limit=100&access_token=${accessToken}`
+    );
+    const json = (await response.json()) as {
+      data?: Array<{
+        id: string;
+        text?: string;
+        timestamp?: string;
+        username?: string;
+        like_count?: number;
+        replies?: {
+          data?: Array<{
+            id: string;
+            text?: string;
+            timestamp?: string;
+            username?: string;
+            like_count?: number;
+          }>;
+        };
+      }>;
+    };
+
+    return (json.data || []).map((comment) => ({
+      id: comment.id,
+      text: comment.text || '',
+      username: comment.username,
+      createdAt: comment.timestamp,
+      likes: comment.like_count,
+      replies: (comment.replies?.data || []).map((reply) => ({
+        id: reply.id,
+        text: reply.text || '',
+        username: reply.username,
+        createdAt: reply.timestamp,
+        likes: reply.like_count,
+      })),
+    }));
   }
 
   override async checkPostStatus(

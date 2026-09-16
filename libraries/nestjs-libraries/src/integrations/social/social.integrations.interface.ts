@@ -104,7 +104,29 @@ export interface ISocialMediaIntegration {
     postDetails: PostDetails[],
     integration: Integration
   ): Promise<PostResponse[]>; // Schedules a new post
+
+  // Fetch the platform comments (replies) of an already published post.
+  // Pure proxy: implementations must query the platform API live and never
+  // persist anything. The platformPostId is the id stored on the Post row
+  // (releaseId) when the post was published.
+  getComments?(
+    accessToken: string,
+    platformPostId: string,
+    integration: Integration
+  ): Promise<PlatformComment[]>;
 }
+
+// Normalized platform comment shape returned by provider.getComments
+export type PlatformComment = {
+  id: string;
+  text: string;
+  author?: string; // Display name
+  username?: string; // Handle / account id
+  authorAvatar?: string;
+  createdAt?: string; // ISO 8601
+  likes?: number;
+  replies?: PlatformComment[];
+};
 
 export type PostResponse = {
   id: string; // The db internal id of the post

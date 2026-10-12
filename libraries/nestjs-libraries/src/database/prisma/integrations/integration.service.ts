@@ -28,6 +28,7 @@ import utc from 'dayjs/plugin/utc';
 import { AutopostRepository } from '@gitroom/nestjs-libraries/database/prisma/autopost/autopost.repository';
 import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
 import { TemporalService } from 'nestjs-temporal-core';
+import { WebhooksService } from '@gitroom/nestjs-libraries/database/prisma/webhooks/webhooks.service';
 
 dayjs.extend(utc);
 
@@ -41,7 +42,8 @@ export class IntegrationService {
     private _notificationService: NotificationService,
     @Inject(forwardRef(() => RefreshIntegrationService))
     private _refreshIntegrationService: RefreshIntegrationService,
-    private _temporalService: TemporalService
+    private _temporalService: TemporalService,
+    private _webhooksService: WebhooksService
   ) {}
 
   async changeActiveCron(orgId: string) {
@@ -152,6 +154,48 @@ export class IntegrationService {
 
   getIntegrationsList(org: string) {
     return this._integrationRepository.getIntegrationsList(org);
+  }
+
+  // Public-API surface for org-owned platform rules (char limits etc.).
+  // The numbers come from the provider's own maxLength() logic — the same code
+  // Postiz uses when validating posts — combined with the org's
+  // additionalSettings (e.g. X "Verified" premium flips 280 → 4000).
+  async getIntegrationSettings(org: string, id: string) {
+    const integration = await this._integrationRepository.getIntegrationById(org, id);
+    if (!integration) {
+      return undefined;
+    }
+
+    const provider = this._integrationManager.getSocialIntegration(
+      integration.providerIdentifier
+    );
+    if (!provider) {
+      return undefined;
+    }
+
+    let additionalSettings: unknown = [];
+    try {
+      additionalSettings = JSON.parse(integration.additionalSettings || '[]');
+    } catch {
+      additionalSettings = [];
+    }
+
+    let charLimit: number | undefined;
+    try {
+      const computed = provider.maxLength(additionalSettings);
+      charLimit = typeof computed === 'number' && computed > 0 ? computed : undefined;
+    } catch {
+      charLimit = undefined;
+    }
+
+    return {
+      integrationId: integration.id,
+      identifier: integration.providerIdentifier,
+      name: integration.name,
+      disabled: integration.disabled,
+      charLimit,
+      additionalSettings,
+    };
   }
 
   getIntegrationForOrder(id: string, order: string, user: string, org: string) {
@@ -678,5 +722,22 @@ export class IntegrationService {
         ];
       }, [] as number[])
     );
+  }
+
+  // Auto-registration of the SocialFlow notification webhook: one row per
+  // org (name-keyed upsert), URL refreshed with org+HMAC handled by the
+  // SocialFlow side. Integrations attach every connected channel so the
+  // webhook fires for all of them.
+  async ensureSocialflowWebhook(
+    orgId: string,
+    integrationId: string,
+    publicUrl: string
+  ) {
+    await this._webhooksService.createWebhook(orgId, {
+      id: '',
+      name: 'socialflow-notifications',
+      url: publicUrl,
+      integrations: [{ id: integrationId }],
+    });
   }
 }

@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: postiz-local-pwd
       POSTGRES_USER: postiz-local
       POSTGRES_DB: postiz-db-local
-      TEMPORAL_ADDRESS: "temporal:7233"
+      TEMPORAL_ADDRESS: "temporal:7234"
     volumes:
       - postgres-volume:/var/lib/postgresql/data
     ports:
@@ -87,7 +87,7 @@ services:
   temporal:
     container_name: temporal
     ports:
-      - "7234:7233"
+      - "7234:7234"
     image: temporalio/auto-setup:1.28.1
     depends_on:
       - temporal-postgresql
@@ -114,8 +114,8 @@ services:
     container_name: temporal-admin-tools
     image: temporalio/admin-tools:1.28.1-tctl-1.18.4-cli-1.4.1
     environment:
-      - TEMPORAL_ADDRESS=temporal:7233
-      - TEMPORAL_CLI_ADDRESS=temporal:7233
+      - TEMPORAL_ADDRESS=temporal:7234
+      - TEMPORAL_CLI_ADDRESS=temporal:7234
     networks:
       - temporal-network
     stdin_open: true
@@ -127,7 +127,7 @@ services:
     container_name: temporal-ui
     image: temporalio/ui:2.34.0
     environment:
-      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_ADDRESS=temporal:7234
       - TEMPORAL_CORS_ORIGINS=http://127.0.0.1:3000
     networks:
       - temporal-network

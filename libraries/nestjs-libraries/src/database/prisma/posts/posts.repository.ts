@@ -885,28 +885,43 @@ export class PostsRepository {
   }
 
   async getPostByForWebhookId(postId: string) {
-    return this._post.model.post.findMany({
+    const select = {
+      id: true,
+      content: true,
+      publishDate: true,
+      releaseURL: true,
+      state: true,
+      integration: {
+        select: {
+          id: true,
+          name: true,
+          providerIdentifier: true,
+          picture: true,
+          type: true,
+        },
+      },
+    };
+    const byId = await this._post.model.post.findMany({
       where: {
         id: postId,
         deletedAt: null,
         parentPostId: null,
       },
-      select: {
-        id: true,
-        content: true,
-        publishDate: true,
-        releaseURL: true,
-        state: true,
-        integration: {
-          select: {
-            id: true,
-            name: true,
-            providerIdentifier: true,
-            picture: true,
-            type: true,
-          },
-        },
+      select,
+    });
+    if (byId.length > 0) {
+      return byId;
+    }
+    // Some providers (e.g. X) return the provider-side post id (tweet id)
+    // from post(); the post workflows pass that value here. updatePost()
+    // stores it as releaseId before sendWebhooks runs, so fall back to it.
+    return this._post.model.post.findMany({
+      where: {
+        releaseId: postId,
+        deletedAt: null,
+        parentPostId: null,
       },
+      select,
     });
   }
 

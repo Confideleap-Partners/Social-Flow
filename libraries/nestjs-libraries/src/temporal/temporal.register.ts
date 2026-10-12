@@ -24,14 +24,25 @@ export class TemporalRegister implements OnModuleInit {
     );
 
     if (missingAttributes.length > 0) {
-      await connection.operatorService.addSearchAttributes({
-        namespace: process.env.TEMPORAL_NAMESPACE || 'default',
-        searchAttributes: missingAttributes.reduce((all, current) => {
-          // @ts-ignore
-          all[current] = 1;
-          return all;
-        }, {}),
-      });
+      try {
+        await connection.operatorService.addSearchAttributes({
+          namespace: process.env.TEMPORAL_NAMESPACE || 'default',
+          searchAttributes: missingAttributes.reduce((all, current) => {
+            // @ts-ignore
+            all[current] = 1;
+            return all;
+          }, {}),
+        });
+      } catch (error) {
+        // Shared Temporal servers can already be at the per-type attribute
+        // limit (Temporal allows max 3 attributes per type). Search
+        // attributes are only used for list filtering — boot must not fail
+        // because of them; log and continue.
+        console.warn(
+          'Failed to register Temporal search attributes (non-fatal):',
+          error instanceof Error ? error.message : error
+        );
+      }
     }
   }
 }

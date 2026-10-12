@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpException,
+  NotFoundException,
   Param,
   Post,
   Put,
@@ -74,6 +75,17 @@ import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 @ApiTags('Public API')
 @Controller('/public/v1')
 export class PublicIntegrationsController {
+  /** Prisma stores post settings as a JSON string — parse defensively. */
+  private parsePostSettings(settings: unknown): Record<string, unknown> | undefined {
+    if (typeof settings !== 'string' || !settings.trim()) return undefined;
+    try {
+      const parsed: unknown = JSON.parse(settings);
+      return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private storage = UploadFactory.createStorage();
 
   constructor(
@@ -449,6 +461,10 @@ export class PublicIntegrationsController {
         tags: rawBody?.tags || [],
         posts: existing.posts.map((p) => ({
           integration: { id: p.integration?.id },
+          // Preserve per-post settings (e.g. X's required who_can_reply_post).
+          // Prisma stores settings as a JSON string — spreading a string
+          // produces garbage keys, so parse before mapping.
+          settings: this.parsePostSettings(p.settings),
           value: [
             {
               id: p.id,
@@ -568,6 +584,25 @@ export class PublicIntegrationsController {
             }
           : undefined,
       }));
+  }
+
+  // Org-owned platform rules (char limit computed by the provider's own
+  // maxLength logic + the org's additionalSettings). Consumed by SocialFlow's
+  // AI context assembly so generations respect the real connected channel.
+  @Get('/integrations/:id/settings')
+  async integrationSettings(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    const settings = await this._integrationService.getIntegrationSettings(
+      org.id,
+      id
+    );
+    if (!settings) {
+      throw new NotFoundException('Integration not found');
+    }
+    return settings;
   }
 
   @Get('/social/:integration')

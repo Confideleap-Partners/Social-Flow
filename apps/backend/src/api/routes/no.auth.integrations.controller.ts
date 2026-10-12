@@ -264,6 +264,21 @@ export class NoAuthIntegrationsController {
         console.log(err);
       });
 
+    // Auto-register the SocialFlow notification webhook so publishes/errors
+    // reach the customer's workspace inbox without manual setup. Idempotent —
+    // the webhook row is upserted by name, URL refreshed on every connect.
+    if (process.env.SOCIALFLOW_WEBHOOK_PUBLIC_URL) {
+      try {
+        await this._integrationService.ensureSocialflowWebhook(
+          org.id,
+          createUpdate.id,
+          process.env.SOCIALFLOW_WEBHOOK_PUBLIC_URL
+        );
+      } catch (err) {
+        console.log('socialflow webhook registration failed', err);
+      }
+    }
+
     // Fetch pages if this is a two-step provider and not a refresh
     let pages: any[] = [];
     if (integrationProvider.isBetweenSteps && !refresh) {

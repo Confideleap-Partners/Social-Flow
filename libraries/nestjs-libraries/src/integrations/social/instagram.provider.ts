@@ -1157,16 +1157,19 @@ export class InstagramProvider
     );
 
     analytics.push(
-      ...data2.map((d: any) => ({
-        label: this.setTitle(d.name),
-        percentageChange: 5,
-        data: [
-          {
-            total: d.total_value.value,
-            date: dayjs().format('YYYY-MM-DD'),
-          },
-        ],
-      }))
+      // data2 is undefined when this second insights call errors; keep the first call's metrics instead of throwing
+      ...(data2 ?? [])
+        .filter((d: any) => d.total_value)
+        .map((d: any) => ({
+          label: this.setTitle(d.name),
+          percentageChange: 5,
+          data: [
+            {
+              total: d.total_value.value,
+              date: dayjs().format('YYYY-MM-DD'),
+            },
+          ],
+        }))
     );
 
     return analytics;

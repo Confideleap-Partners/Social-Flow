@@ -904,6 +904,15 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       });
 
       const acc = [] as any[];
+      // requested above but previously never returned, so "views" was missing from channel analytics
+      acc.push({
+        label: 'Views',
+        data: mappedData?.map((p: any) => ({
+          total: p.views,
+          date: p.day,
+        })),
+      });
+
       acc.push({
         label: 'Estimated Minutes Watched',
         data: mappedData?.map((p: any) => ({

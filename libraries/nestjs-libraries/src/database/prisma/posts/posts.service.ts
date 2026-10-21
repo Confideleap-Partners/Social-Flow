@@ -53,6 +53,7 @@ import { stripLinks } from '@gitroom/helpers/utils/strip.links';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
+import { HASHTAG_LIMITS, countHashtags } from '@gitroom/helpers/utils/hashtag.limit';
 import { weightedLength } from '@gitroom/helpers/utils/count.length';
 
 type PostWithConditionals = Post & {
@@ -824,6 +825,21 @@ export class PostsService {
           );
         } catch (err: any) {
           errors = err?.message || 'Invalid media';
+        }
+
+        // Hashtag cap rides on `errors` so every caller that already rejects invalid
+        // (non-draft) posts enforces it without a new flag.
+        const hashtagLimit = HASHTAG_LIMITS[integration.providerIdentifier];
+        if (errors === true && hashtagLimit) {
+          const overLimit = (post.value || []).some(
+            (a) =>
+              countHashtags(
+                stripHtmlValidation('normal', a.content || '', true)
+              ) > hashtagLimit
+          );
+          if (overLimit) {
+            errors = `Too many hashtags: ${integration.name} allows at most ${hashtagLimit}`;
+          }
         }
 
         const maximumCharacters = provider.maxLength(additionalSettings, settings);

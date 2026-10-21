@@ -1,3 +1,4 @@
+import { HASHTAG_LIMITS } from '@gitroom/helpers/utils/hashtag.limit';
 import {
   forwardRef,
   HttpException,
@@ -194,6 +195,7 @@ export class IntegrationService {
       name: integration.name,
       disabled: integration.disabled,
       charLimit,
+      hashtagLimit: HASHTAG_LIMITS[integration.providerIdentifier],
       additionalSettings,
     };
   }

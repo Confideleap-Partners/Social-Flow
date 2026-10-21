@@ -273,6 +273,7 @@ services:
       - ES_SEEDS=temporal-elasticsearch
       - ES_VERSION=v7
       - TEMPORAL_NAMESPACE=default
+      - PROMETHEUS_ENDPOINT=0.0.0.0:9090 # scraped by monitoring/
     networks:
       - temporal-network
     volumes:

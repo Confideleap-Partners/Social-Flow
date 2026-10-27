@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import {
   Activity,
@@ -482,11 +483,37 @@ export class PostActivity {
         }
       );
 
-      if (webhooks.length === 0) {
+      const globalUrl = process.env.SOCIALFLOW_GLOBAL_WEBHOOK_URL;
+      const globalSecret = process.env.SOCIALFLOW_WEBHOOK_SECRET;
+      const sendGlobal = Boolean(globalUrl && globalSecret);
+      if (webhooks.length === 0 && !sendGlobal) {
         return;
       }
 
       const post = await this._postService.getPostByForWebhookId(postId);
+
+      // One org-independent delivery to SocialFlow for every publish: signed
+      // "t=<ts>,v1=<hmac(ts,body)>", tenant resolved server-side from postizOrgId.
+      // Trusted env-configured (often internal) URL, so no SSRF-pinned dispatcher.
+      if (sendGlobal) {
+        try {
+          const body = JSON.stringify({ postizOrgId: orgId, post });
+          const ts = Math.floor(Date.now() / 1000);
+          const v1 = createHmac('sha256', globalSecret!)
+            .update(`${ts},${body}`)
+            .digest('hex');
+          await fetch(globalUrl!, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-SocialFlow-Signature': `t=${ts},v1=${v1}`,
+            },
+            body,
+          });
+        } catch (e) {
+          /**empty**/
+        }
+      }
       await Promise.all(
         webhooks.map(async (webhook) => {
           try {

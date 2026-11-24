@@ -575,6 +575,7 @@ export class PublicIntegrationsController {
         name: integration.name,
         identifier: integration.providerIdentifier,
         picture: integration.picture,
+        // disabled: switched off (by hand, or because a subscription shrank). refreshNeeded: the token could not be refreshed.
         disabled: integration.disabled,
         profile: integration.profile,
         customer: integration.customer
@@ -583,6 +584,10 @@ export class PublicIntegrationsController {
               name: integration.customer.name,
             }
           : undefined,
+        refreshNeeded: integration.refreshNeeded,
+        inBetweenSteps: integration.inBetweenSteps,
+        connectedAt: integration.createdAt,
+        ...this._integrationService.getAccessInfo(integration),
       }));
   }
 

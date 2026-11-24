@@ -12,6 +12,13 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
+      # OAuth providers build their callback URLs from FRONTEND_URL. Keep all
+      # public Postiz URLs tied to the Traefik host instead of allowing a stale
+      # Infisical value (for example, the SocialFlow product frontend) to send
+      # provider callbacks to the wrong application.
+      MAIN_URL: https://${APP_DOMAIN:?APP_DOMAIN must be set}
+      FRONTEND_URL: https://${APP_DOMAIN:?APP_DOMAIN must be set}
+      NEXT_PUBLIC_BACKEND_URL: https://${APP_DOMAIN:?APP_DOMAIN must be set}/api
       DATABASE_URL: ${POSTIZ_DATABASE_URL:?POSTIZ_DATABASE_URL must be set}
       REDIS_URL: ${POSTIZ_REDIS_URL:-redis://postiz-redis:6379}
       TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:-temporal:7233}

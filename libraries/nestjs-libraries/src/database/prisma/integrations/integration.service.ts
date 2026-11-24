@@ -153,6 +153,28 @@ export class IntegrationService {
     return this._integrationRepository.updateOnCustomerName(org, id, name);
   }
 
+  /**
+   * When access to a channel really ends, as the public API reports it. Postiz renews a token it can refresh by itself (the refresh
+   * workflow sleeps until `tokenExpiration`), so for those the date is only the next renewal. A provider that reports no expiry is
+   * stored as `expiresIn = 999999999` seconds (see IntegrationRepository.createOrUpdateIntegration), about 31 years out.
+   */
+  getAccessInfo(integration: Pick<Integration, 'refreshToken' | 'tokenExpiration'>) {
+    const canAutoRefresh = !!integration.refreshToken;
+    const expiration = integration.tokenExpiration
+      ? dayjs(integration.tokenExpiration)
+      : null;
+    const isRealExpiry =
+      !!expiration &&
+      expiration.isValid() &&
+      expiration.isBefore(dayjs().add(10, 'year'));
+
+    return {
+      canAutoRefresh,
+      accessExpiresAt:
+        !canAutoRefresh && isRealExpiry ? expiration.toDate() : null,
+    };
+  }
+
   getIntegrationsList(org: string) {
     return this._integrationRepository.getIntegrationsList(org);
   }

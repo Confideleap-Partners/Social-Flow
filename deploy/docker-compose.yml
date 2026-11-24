@@ -20,6 +20,10 @@ services:
       FRONTEND_URL: https://${APP_DOMAIN:?APP_DOMAIN must be set}
       NEXT_PUBLIC_BACKEND_URL: https://${APP_DOMAIN:?APP_DOMAIN must be set}/api
       DATABASE_URL: ${POSTIZ_DATABASE_URL:?POSTIZ_DATABASE_URL must be set}
+      # Same defaults the hand-started stack used; a value in Infisical (the .env file) still wins.
+      BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://127.0.0.1:3000}
+      IS_GENERAL: ${IS_GENERAL:-true}
+      DISABLE_REGISTRATION: ${DISABLE_REGISTRATION:-false}
       REDIS_URL: ${POSTIZ_REDIS_URL:-redis://postiz-redis:6379}
       TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:-temporal:7233}
       UPLOAD_DIRECTORY: /uploads
@@ -58,17 +62,17 @@ services:
 volumes:
   config:
     external: true
-    name: ${POSTIZ_CONFIG_VOLUME:-social-flow_postiz-config}
+    name: ${POSTIZ_CONFIG_VOLUME:?POSTIZ_CONFIG_VOLUME must be set (deploy/discover-infra.sh finds it)}
   uploads:
     external: true
-    name: ${POSTIZ_UPLOADS_VOLUME:-social-flow_postiz-uploads}
+    name: ${POSTIZ_UPLOADS_VOLUME:?POSTIZ_UPLOADS_VOLUME must be set (deploy/discover-infra.sh finds it)}
 
 networks:
   postiz:
     external: true
-    name: ${POSTIZ_NETWORK:-social-flow_postiz-network}
+    name: ${POSTIZ_NETWORK:?POSTIZ_NETWORK must be set (deploy/discover-infra.sh finds it)}
   temporal:
     external: true
-    name: ${TEMPORAL_NETWORK:-temporal-network}
+    name: ${TEMPORAL_NETWORK:?TEMPORAL_NETWORK must be set (deploy/discover-infra.sh finds it)}
   traefik-public:
     external: true

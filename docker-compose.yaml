@@ -275,7 +275,8 @@ services:
       - TEMPORAL_NAMESPACE=default
       - PROMETHEUS_ENDPOINT=0.0.0.0:9090 # scraped by monitoring/
     networks:
-      - temporal-network
+      temporal-network:
+        aliases: [temporal, temporal-platform] # unique alias: socialflow-net also has a 'temporal'
     volumes:
       - ./dynamicconfig:/etc/temporal/config/dynamicconfig
     labels:

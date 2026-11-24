@@ -25,7 +25,7 @@ old_keys() { docker inspect -f '{{range .Config.Env}}{{$k := index (split . "=")
 old_value() { docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' postiz | { grep -E "^$1=" || true; } | head -1 | cut -d= -f2-; }
 
 # Set by the compose file itself, so they never come from the env file.
-set_by_compose=" NODE_ENV DATABASE_URL REDIS_URL TEMPORAL_ADDRESS UPLOAD_DIRECTORY NEXT_PUBLIC_UPLOAD_DIRECTORY MAIN_URL FRONTEND_URL NEXT_PUBLIC_BACKEND_URL BACKEND_INTERNAL_URL IS_GENERAL DISABLE_REGISTRATION "
+set_by_compose=" NODE_ENV DATABASE_URL REDIS_URL TEMPORAL_ADDRESS UPLOAD_DIRECTORY NEXT_PUBLIC_UPLOAD_DIRECTORY MAIN_URL FRONTEND_URL NEXT_PUBLIC_BACKEND_URL BACKEND_INTERNAL_URL IS_GENERAL DISABLE_REGISTRATION API_LIMIT FEE_AMOUNT NX_ADD_PLUGINS "
 ignored=" $(get_value ENV_PARITY_IGNORE) "
 # Whatever the old container's image defines on its own (PATH, NODE_VERSION, ...) is not configuration and comes with any build.
 image_defined=" $(docker image inspect -f '{{range .Config.Env}}{{index (split . "=") 0}}{{" "}}{{end}}' "$(docker inspect -f '{{.Image}}' postiz)") "

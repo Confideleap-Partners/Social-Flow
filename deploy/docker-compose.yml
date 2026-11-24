@@ -24,6 +24,9 @@ services:
       BACKEND_INTERNAL_URL: ${BACKEND_INTERNAL_URL:-http://127.0.0.1:3000}
       IS_GENERAL: ${IS_GENERAL:-true}
       DISABLE_REGISTRATION: ${DISABLE_REGISTRATION:-false}
+      API_LIMIT: ${API_LIMIT:-30}
+      FEE_AMOUNT: ${FEE_AMOUNT:-0.05}
+      NX_ADD_PLUGINS: ${NX_ADD_PLUGINS:-false}
       REDIS_URL: ${POSTIZ_REDIS_URL:-redis://postiz-redis:6379}
       TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:-temporal:7233}
       UPLOAD_DIRECTORY: /uploads
@@ -50,13 +53,13 @@ services:
     networks:
       - postiz
       - temporal
-      - traefik-public
     labels:
       - 'traefik.enable=true'
-      - 'traefik.docker.network=traefik-public'
+      # Entry point and network must exist in this server's Traefik (here: entry point `https`). Both can be overridden in Infisical.
+      - 'traefik.docker.network=${TRAEFIK_NETWORK:-${POSTIZ_NETWORK}}'
       - 'traefik.http.routers.social-flow-${DEPLOY_ENV}.rule=Host(`${APP_DOMAIN}`)'
       - 'traefik.http.routers.social-flow-${DEPLOY_ENV}.tls=true'
-      - 'traefik.http.routers.social-flow-${DEPLOY_ENV}.entrypoints=websecure'
+      - 'traefik.http.routers.social-flow-${DEPLOY_ENV}.entrypoints=${TRAEFIK_ENTRYPOINT:-https}'
       - 'traefik.http.services.social-flow-${DEPLOY_ENV}.loadbalancer.server.port=5000'
 
 volumes:
@@ -74,5 +77,3 @@ networks:
   temporal:
     external: true
     name: ${TEMPORAL_NETWORK:?TEMPORAL_NETWORK must be set (deploy/discover-infra.sh finds it)}
-  traefik-public:
-    external: true

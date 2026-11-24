@@ -12,6 +12,9 @@
 #   TEMPORAL_NETWORK      the network of the temporal container
 #   POSTIZ_CONFIG_VOLUME  what is mounted at /config  } on the running compose app container if there is one,
 #   POSTIZ_UPLOADS_VOLUME what is mounted at /uploads } otherwise on the older hand-started `postiz` container
+#   TRAEFIK_NETWORK       the first of POSTIZ_NETWORK / TEMPORAL_NETWORK that the `traefik` container is also attached to, so Traefik
+#                         reaches the app over a network the app is already on (nothing new to join, nothing on Traefik to change).
+#                         Skipped when there is no `traefik` container. Fails when Traefik shares neither network.
 set -euo pipefail
 
 ENV_FILE=${1:?usage: discover-infra.sh <env-file> <deploy-env>}
@@ -58,8 +61,32 @@ resolve TEMPORAL_NETWORK "$(network_of temporal)" "container temporal"
 resolve POSTIZ_CONFIG_VOLUME "$(volume_at "$volume_source" /config)" "container $volume_source at /config"
 resolve POSTIZ_UPLOADS_VOLUME "$(volume_at "$volume_source" /uploads)" "container $volume_source at /uploads"
 
+# The network Traefik reaches the app over.
+traefik_network() {
+  local nets key
+  nets=$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{println $k}}{{end}}' traefik)
+  for key in POSTIZ_NETWORK TEMPORAL_NETWORK; do
+    has_value "$key" || continue
+    if printf '%s\n' "$nets" | grep -qx "$(get_value "$key")"; then get_value "$key"; return 0; fi
+  done
+  return 0
+}
+if has_value TRAEFIK_NETWORK; then
+  echo "TRAEFIK_NETWORK=$(get_value TRAEFIK_NETWORK) (already set, kept)"
+elif exists traefik; then
+  found=$(traefik_network || true)
+  if [ -n "$found" ]; then
+    printf 'TRAEFIK_NETWORK=%s\n' "$found" >> "$ENV_FILE"
+    echo "TRAEFIK_NETWORK=$found (container traefik is attached to it)"
+  else
+    fail "container traefik is attached to neither $(get_value POSTIZ_NETWORK) nor $(get_value TEMPORAL_NETWORK), so it cannot reach the app. Attach it (docker network connect <network> traefik) or set TRAEFIK_NETWORK to a network both can use."
+  fi
+else
+  echo "No container named traefik here; TRAEFIK_NETWORK not needed"
+fi
+
 # Whatever the names came from, the things they name must exist: compose treats them as external and must never create empty ones.
-for key in POSTIZ_NETWORK TEMPORAL_NETWORK; do
+for key in POSTIZ_NETWORK TEMPORAL_NETWORK TRAEFIK_NETWORK; do
   has_value "$key" && { docker network inspect "$(get_value "$key")" >/dev/null 2>&1 || fail "network $(get_value "$key") ($key) does not exist"; }
 done
 for key in POSTIZ_CONFIG_VOLUME POSTIZ_UPLOADS_VOLUME; do

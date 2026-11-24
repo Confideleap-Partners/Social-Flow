@@ -60,7 +60,7 @@ jobs:
 
       - name: Copy deployment files
         run: |
-          scp -i ~/.ssh/id_rsa deploy/docker-compose.yml deploy/discover-infra.sh deploy/check-env-parity.sh \
+          scp -i ~/.ssh/id_rsa deploy/docker-compose.yml deploy/discover-infra.sh deploy/check-env-parity.sh deploy/verify-route.sh \
             "$VPS_USER@$VPS_HOST:/var/www/social-flow-$DEPLOY_ENV/deploy/"
         env:
           DEPLOY_ENV: ${{ inputs.environment }}
@@ -131,10 +131,6 @@ jobs:
           script: |
             set -e
             cd /var/www/social-flow-${{ inputs.environment }}
-            docker network inspect traefik-public >/dev/null 2>&1 || {
-              echo "Required existing network traefik-public is missing"
-              exit 1
-            }
             for container in postiz-postgres postiz-redis temporal; do
               [ "$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null)" = running ] || {
                 echo "Required existing container $container is not running"
@@ -232,6 +228,26 @@ jobs:
               echo "Rollback failed to become healthy"
             fi
             exit 1
+
+      - name: Verify public route
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ env.VPS_HOST }}
+          username: ${{ inputs.vps_user }}
+          key: ${{ env.VPS_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -e
+            cd /var/www/social-flow-${{ inputs.environment }}
+            DOMAIN=$(grep -E '^APP_DOMAIN=' deploy/.env | tail -1 | cut -d= -f2-)
+            if ! docker logs traefik --since 1m >/dev/null 2>&1; then
+              echo "No Traefik container named traefik on this server; skipping the public route check"
+              exit 0
+            fi
+            bash deploy/verify-route.sh "$DOMAIN" || {
+              docker logs traefik --since 10m 2>&1 | grep -iE "social-flow-${{ inputs.environment }}|$DOMAIN" | tail -6 || true
+              exit 1
+            }
 
       - name: Prune old images
         uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5

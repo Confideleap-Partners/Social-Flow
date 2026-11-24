@@ -502,7 +502,7 @@ export class PostActivity {
           const v1 = createHmac('sha256', globalSecret!)
             .update(`${ts},${body}`)
             .digest('hex');
-          await fetch(globalUrl!, {
+          const res = await fetch(globalUrl!, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -510,8 +510,9 @@ export class PostActivity {
             },
             body,
           });
+          console.log(`[socialflow-webhook] post ${postId} org ${orgId} -> HTTP ${res.status}`);
         } catch (e) {
-          /**empty**/
+          console.error(`[socialflow-webhook] post ${postId} org ${orgId} delivery failed`, e);
         }
       }
       await Promise.all(

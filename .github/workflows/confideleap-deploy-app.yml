@@ -60,8 +60,8 @@ jobs:
 
       - name: Copy deployment files
         run: |
-          scp -i ~/.ssh/id_rsa deploy/docker-compose.yml \
-            "$VPS_USER@$VPS_HOST:/var/www/social-flow-$DEPLOY_ENV/deploy/docker-compose.yml"
+          scp -i ~/.ssh/id_rsa deploy/docker-compose.yml deploy/discover-infra.sh deploy/check-env-parity.sh \
+            "$VPS_USER@$VPS_HOST:/var/www/social-flow-$DEPLOY_ENV/deploy/"
         env:
           DEPLOY_ENV: ${{ inputs.environment }}
           VPS_USER: ${{ inputs.vps_user }}
@@ -92,6 +92,15 @@ jobs:
               > deploy/.env.new < /dev/null
             sed -E "s/^([A-Za-z_][A-Za-z0-9_]*)='(.*)'$/\1=\2/" deploy/.env.new > deploy/.env.stripped
             mv deploy/.env.stripped deploy/.env.new
+            # Attach to the infrastructure that is already running (its network and volume names depend on how it was started).
+            # Read-only. Exits non-zero, before deploy/.env is replaced, if anything it needs is missing.
+            bash deploy/discover-infra.sh deploy/.env.new "$DEPLOY_ENV"
+            # First cutover only: nothing the old hand-started container was configured with may be missing from the new env.
+            # Prints setting names only; exits non-zero, before deploy/.env is replaced, if something is missing.
+            bash deploy/check-env-parity.sh deploy/.env.new "$DEPLOY_ENV"
+            for key in JWT_SECRET SOCIALFLOW_GLOBAL_WEBHOOK_URL SOCIALFLOW_WEBHOOK_SECRET STORAGE_PROVIDER; do
+              grep -qE "^${key}=.+" deploy/.env.new || echo "WARNING: $key is not set in Infisical ($DEPLOY_ENV); the hand-started stack had it"
+            done
             printf 'IMAGE_TAG=%s\nDEPLOY_ENV=%s\n' "$IMAGE_TAG" "$DEPLOY_ENV" >> deploy/.env.new
             mv deploy/.env.new deploy/.env
             chmod 600 deploy/.env
@@ -152,16 +161,20 @@ jobs:
               if [ "$LEGACY_STOPPED" = 1 ]; then
                 echo "Cutover failed; restarting legacy postiz container"
                 docker compose --env-file deploy/.env -f deploy/docker-compose.yml stop app 2>/dev/null || true
+                docker update --restart="$(cat .previous-restart-policy 2>/dev/null || echo always)" postiz || true
                 docker start postiz || true
               fi
               exit "$STATUS"
             }
             trap restore_legacy_on_error ERR
             if [ -f .previous-deployment-type ] && [ "$(cat .previous-deployment-type)" = legacy ]; then
+              docker inspect --format='{{.HostConfig.RestartPolicy.Name}}' postiz > .previous-restart-policy
+              docker update --restart=no postiz
               docker stop postiz
               LEGACY_STOPPED=1
             fi
-            docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --remove-orphans
+            # Only the app: the database, Redis and Temporal containers are never part of this project and never restarted.
+            docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --no-deps app
             trap - ERR
 
       - name: Verify application health
@@ -188,6 +201,7 @@ jobs:
               echo "Health check failed; restoring $PREVIOUS_IMAGE"
               if [ "$(cat .previous-deployment-type 2>/dev/null)" = legacy ]; then
                 docker compose --env-file deploy/.env -f deploy/docker-compose.yml stop app
+                docker update --restart="$(cat .previous-restart-policy 2>/dev/null || echo always)" postiz || true
                 docker start postiz
                 for i in $(seq 1 24); do
                   if docker exec postiz node -e \

@@ -154,12 +154,21 @@ export class IntegrationService {
   }
 
   /**
-   * When access to a channel really ends, as the public API reports it. Postiz renews a token it can refresh by itself (the refresh
-   * workflow sleeps until `tokenExpiration`), so for those the date is only the next renewal. A provider that reports no expiry is
-   * stored as `expiresIn = 999999999` seconds (see IntegrationRepository.createOrUpdateIntegration), about 31 years out.
+   * When access to a channel really ends, as the public API reports it.
+   *
+   * A token can be renewed only if it has a refresh token of its own. Providers whose refreshToken() cannot renew (Facebook,
+   * Instagram) still have to store something there, because an empty one is rejected, so they store the access token itself.
+   * Such a token ends at `tokenExpiration` (59 days after connecting for those two), and the channel then needs reconnecting.
+   * For a token that can be renewed, `tokenExpiration` is only the next renewal, so no end is known.
+   * A provider that reports no expiry is stored as `expiresIn = 999999999` seconds (see
+   * IntegrationRepository.createOrUpdateIntegration), about 31 years out; that is not an end either.
    */
-  getAccessInfo(integration: Pick<Integration, 'refreshToken' | 'tokenExpiration'>) {
-    const canAutoRefresh = !!integration.refreshToken;
+  getAccessInfo(
+    integration: Pick<Integration, 'token' | 'refreshToken' | 'tokenExpiration'>
+  ) {
+    const canAutoRefresh =
+      !!integration.refreshToken &&
+      integration.refreshToken !== integration.token;
     const expiration = integration.tokenExpiration
       ? dayjs(integration.tokenExpiration)
       : null;

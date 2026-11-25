@@ -185,19 +185,16 @@ export class IntegrationService {
   }
 
   /**
-   * What SocialFlow can do on a channel's network, read from what the provider implements, so it needs no per-provider code. Nine of
-   * the eleven providers that request OAuth scopes refuse to connect unless every requested scope was granted (checkScopes), so
-   * for them a connected channel has all the permissions its provider asks for.
+   * What SocialFlow can do on a channel's network (see IntegrationManager.getCapabilities). Nine of the eleven providers that
+   * request OAuth scopes refuse to connect unless every requested scope was granted (checkScopes), so for them a connected channel
+   * has all the permissions its provider asks for.
    */
   getCapabilities(providerIdentifier: string) {
-    const provider = this._integrationManager.getSocialIntegration(providerIdentifier);
+    return this._integrationManager.getCapabilities(providerIdentifier);
+  }
 
-    return {
-      publish: typeof provider?.post === 'function',
-      analytics: typeof provider?.analytics === 'function',
-      comments: typeof provider?.getComments === 'function',
-      followers: typeof provider?.followers === 'function',
-    };
+  getProviders() {
+    return this._integrationManager.getProviders();
   }
 
   /**
@@ -239,7 +236,8 @@ export class IntegrationService {
       followers =
         (await provider.followers(
           getIntegration.internalId,
-          getIntegration.token
+          getIntegration.token,
+          getIntegration
         )) ?? null;
     } catch (err) {
       followers = null;

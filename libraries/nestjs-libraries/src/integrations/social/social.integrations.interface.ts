@@ -29,7 +29,11 @@ export interface IAuthenticator {
     date: number
   ): Promise<AnalyticsData[]>;
   // The channel's current total number of followers, read live from the network, or undefined when the network does not give one.
-  followers?(id: string, accessToken: string): Promise<number | undefined>;
+  followers?(
+    id: string,
+    accessToken: string,
+    integration: Integration
+  ): Promise<number | undefined>;
   postAnalytics?(
     integrationId: string,
     accessToken: string,

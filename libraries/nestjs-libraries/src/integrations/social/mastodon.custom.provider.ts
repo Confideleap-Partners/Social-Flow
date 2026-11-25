@@ -87,6 +87,14 @@ export class MastodonCustomProvider extends MastodonProvider {
     }
   }
 
+  override async followers(
+    id: string,
+    accessToken: string,
+    integration?: Integration
+  ): Promise<number | undefined> {
+    return this.followersOf(this.instanceUrl(integration), accessToken);
+  }
+
   override async post(
     id: string,
     accessToken: string,

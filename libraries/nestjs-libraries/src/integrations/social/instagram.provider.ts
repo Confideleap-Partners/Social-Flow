@@ -1122,7 +1122,11 @@ export class InstagramProvider
     return '';
   }
 
-  async followers(
+  async followers(id: string, token: string): Promise<number | undefined> {
+    return this.followersOf(id, token);
+  }
+
+  async followersOf(
     id: string,
     token: string,
     type = 'graph.facebook.com'

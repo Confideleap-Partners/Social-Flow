@@ -108,6 +108,22 @@ export class DribbbleProvider extends SocialAbstract implements SocialProvider {
     );
   }
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const { followers_count } = await (
+      await this.fetch('https://api.dribbble.com/v2/user', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+    ).json();
+
+    return typeof followers_count === 'number' ? followers_count : undefined;
+  }
+
   async generateAuthUrl() {
     const state = makeId(6);
     return {

@@ -613,6 +613,12 @@ export class PublicIntegrationsController {
     return settings;
   }
 
+  @Get('/providers')
+  providers() {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._integrationService.getProviders();
+  }
+
   @Get('/integrations/:id/followers')
   async integrationFollowers(
     @GetOrgFromRequest() org: Organization,

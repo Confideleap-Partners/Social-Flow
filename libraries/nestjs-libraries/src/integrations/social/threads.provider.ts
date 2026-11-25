@@ -746,6 +746,21 @@ export class ThreadsProvider extends SocialAbstract implements SocialProvider {
     ];
   }
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const { data } = await (
+      await fetch(
+        `https://graph.threads.net/v1.0/${id}/threads_insights?metric=followers_count&access_token=${accessToken}`
+      )
+    ).json();
+
+    const followers = data?.find((d: any) => d.name === 'followers_count')
+      ?.total_value?.value;
+    return typeof followers === 'number' ? followers : undefined;
+  }
+
   async analytics(
     id: string,
     accessToken: string,

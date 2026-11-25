@@ -315,6 +315,30 @@ export class LinkedinPageProvider
     );
   }
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const data = await (
+      await fetch(
+        `https://api.linkedin.com/rest/networkSizes/${encodeURIComponent(
+          `urn:li:organization:${id}`
+        )}?edgeType=COMPANY_FOLLOWED_BY_MEMBER`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Linkedin-Version': '202601',
+            'X-Restli-Protocol-Version': '2.0.0',
+          },
+        }
+      )
+    ).json();
+
+    return typeof data?.firstDegreeSize === 'number'
+      ? data.firstDegreeSize
+      : undefined;
+  }
+
   async analytics(
     id: string,
     accessToken: string,

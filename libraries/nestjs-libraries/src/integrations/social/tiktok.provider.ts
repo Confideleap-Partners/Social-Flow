@@ -934,6 +934,26 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
     );
   }
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const data = await (
+      await fetch(
+        'https://open.tiktokapis.com/v2/user/info/?fields=follower_count',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+    ).json();
+
+    const followers = data?.data?.user?.follower_count;
+    return typeof followers === 'number' ? followers : undefined;
+  }
+
   async analytics(
     id: string,
     accessToken: string,

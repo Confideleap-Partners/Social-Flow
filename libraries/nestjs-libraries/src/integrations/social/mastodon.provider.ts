@@ -95,6 +95,34 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     )}&scope=${this.scopes.join('+')}&state=${state}`;
   }
 
+  async followers(
+    id: string,
+    accessToken: string,
+    integration?: Integration
+  ): Promise<number | undefined> {
+    return this.followersOf(
+      process.env.MASTODON_URL || 'https://mastodon.social',
+      accessToken
+    );
+  }
+
+  protected async followersOf(
+    instanceUrl: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const account = await (
+      await this.fetch(`${instanceUrl}/api/v1/accounts/verify_credentials`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
+    ).json();
+
+    return typeof account?.followers_count === 'number'
+      ? account.followers_count
+      : undefined;
+  }
+
   async generateAuthUrl() {
     const state = makeId(6);
     const url = this.generateUrlDynamic(

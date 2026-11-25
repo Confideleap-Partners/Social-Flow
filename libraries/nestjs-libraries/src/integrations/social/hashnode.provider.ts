@@ -25,6 +25,26 @@ export class HashnodeProvider extends SocialAbstract implements SocialProvider {
   }
   dto = HashnodeSettingsDto;
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const { data } = await (
+      await fetch('https://gql.hashnode.com', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `${accessToken}`,
+        },
+        body: JSON.stringify({ query: `query { me { followersCount } }` }),
+      })
+    ).json();
+
+    return typeof data?.me?.followersCount === 'number'
+      ? data.me.followersCount
+      : undefined;
+  }
+
   async generateAuthUrl() {
     const state = makeId(6);
     return {

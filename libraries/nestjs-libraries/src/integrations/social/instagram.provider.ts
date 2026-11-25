@@ -1122,6 +1122,27 @@ export class InstagramProvider
     return '';
   }
 
+  async followers(id: string, token: string): Promise<number | undefined> {
+    return this.followersOf(id, token);
+  }
+
+  async followersOf(
+    id: string,
+    token: string,
+    type = 'graph.facebook.com'
+  ): Promise<number | undefined> {
+    const [accessToken] = token.split('___');
+    const data = await (
+      await fetch(
+        `https://${type}/v21.0/${id}?fields=followers_count&access_token=${accessToken}`
+      )
+    ).json();
+
+    return typeof data?.followers_count === 'number'
+      ? data.followers_count
+      : undefined;
+  }
+
   async analytics(
     id: string,
     token: string,

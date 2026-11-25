@@ -123,6 +123,29 @@ export class IntegrationManager {
       .map(([from]) => from);
   }
 
+  /** What SocialFlow can do on a provider's network, read from what the provider implements. */
+  getCapabilities(identifier: string) {
+    const provider = this.getSocialIntegration(identifier);
+
+    return {
+      publish: typeof provider?.post === 'function',
+      analytics: typeof provider?.analytics === 'function',
+      comments: typeof provider?.getComments === 'function',
+      followers: typeof provider?.followers === 'function',
+    };
+  }
+
+  /** Every provider that can be connected, with what SocialFlow can do on it (before any channel exists). */
+  getProviders() {
+    return socialIntegrationList
+      .filter((p) => !this.isHiddenProvider(p.identifier))
+      .map((p) => ({
+        identifier: p.identifier,
+        name: p.name,
+        capabilities: this.getCapabilities(p.identifier),
+      }));
+  }
+
   async getAllIntegrations() {
     return {
       social: await Promise.all(

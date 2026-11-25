@@ -588,6 +588,9 @@ export class PublicIntegrationsController {
         inBetweenSteps: integration.inBetweenSteps,
         connectedAt: integration.createdAt,
         ...this._integrationService.getAccessInfo(integration),
+        capabilities: this._integrationService.getCapabilities(
+          integration.providerIdentifier
+        ),
       }));
   }
 
@@ -608,6 +611,25 @@ export class PublicIntegrationsController {
       throw new NotFoundException('Integration not found');
     }
     return settings;
+  }
+
+  @Get('/providers')
+  providers() {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._integrationService.getProviders();
+  }
+
+  @Get('/integrations/:id/followers')
+  async integrationFollowers(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    Sentry.metrics.count('public_api-request', 1);
+    const followers = await this._integrationService.getFollowers(org, id);
+    if (followers === undefined) {
+      throw new NotFoundException('Integration not found');
+    }
+    return { followers };
   }
 
   @Get('/social/:integration')

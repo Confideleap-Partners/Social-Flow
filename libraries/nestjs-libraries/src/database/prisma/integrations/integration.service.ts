@@ -154,12 +154,21 @@ export class IntegrationService {
   }
 
   /**
-   * When access to a channel really ends, as the public API reports it. Postiz renews a token it can refresh by itself (the refresh
-   * workflow sleeps until `tokenExpiration`), so for those the date is only the next renewal. A provider that reports no expiry is
-   * stored as `expiresIn = 999999999` seconds (see IntegrationRepository.createOrUpdateIntegration), about 31 years out.
+   * When access to a channel really ends, as the public API reports it.
+   *
+   * A token can be renewed only if it has a refresh token of its own. Providers whose refreshToken() cannot renew (Facebook,
+   * Instagram) still have to store something there, because an empty one is rejected, so they store the access token itself.
+   * Such a token ends at `tokenExpiration` (59 days after connecting for those two), and the channel then needs reconnecting.
+   * For a token that can be renewed, `tokenExpiration` is only the next renewal, so no end is known.
+   * A provider that reports no expiry is stored as `expiresIn = 999999999` seconds (see
+   * IntegrationRepository.createOrUpdateIntegration), about 31 years out; that is not an end either.
    */
-  getAccessInfo(integration: Pick<Integration, 'refreshToken' | 'tokenExpiration'>) {
-    const canAutoRefresh = !!integration.refreshToken;
+  getAccessInfo(
+    integration: Pick<Integration, 'token' | 'refreshToken' | 'tokenExpiration'>
+  ) {
+    const canAutoRefresh =
+      !!integration.refreshToken &&
+      integration.refreshToken !== integration.token;
     const expiration = integration.tokenExpiration
       ? dayjs(integration.tokenExpiration)
       : null;
@@ -173,6 +182,77 @@ export class IntegrationService {
       accessExpiresAt:
         !canAutoRefresh && isRealExpiry ? expiration.toDate() : null,
     };
+  }
+
+  /**
+   * What SocialFlow can do on a channel's network (see IntegrationManager.getCapabilities). Nine of the eleven providers that
+   * request OAuth scopes refuse to connect unless every requested scope was granted (checkScopes), so for them a connected channel
+   * has all the permissions its provider asks for.
+   */
+  getCapabilities(providerIdentifier: string) {
+    return this._integrationManager.getCapabilities(providerIdentifier);
+  }
+
+  getProviders() {
+    return this._integrationManager.getProviders();
+  }
+
+  /**
+   * The channel's current total number of followers, or null when the network does not give one or the call fails. Read-only: unlike
+   * checkAnalytics it never refreshes a token or disconnects a channel, so an expired channel simply has no number. Cached, because
+   * it is a live call to the network for a single number. Undefined means there is no such channel.
+   */
+  async getFollowers(
+    org: Organization,
+    integration: string
+  ): Promise<number | null | undefined> {
+    const getIntegration = await this.getIntegrationById(org.id, integration);
+
+    if (!getIntegration) {
+      return undefined;
+    }
+
+    const provider = this._integrationManager.getSocialIntegration(
+      getIntegration.providerIdentifier
+    );
+
+    if (
+      getIntegration.type !== 'social' ||
+      !provider?.followers ||
+      getIntegration.refreshNeeded ||
+      dayjs(getIntegration.tokenExpiration).isBefore(dayjs())
+    ) {
+      return null;
+    }
+
+    const key = `followers:${org.id}:${integration}`;
+    const cached = await ioRedis.get(key);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+
+    let followers: number | null = null;
+    try {
+      followers =
+        (await provider.followers(
+          getIntegration.internalId,
+          getIntegration.token,
+          getIntegration
+        )) ?? null;
+    } catch (err) {
+      followers = null;
+    }
+
+    const isDevelopment =
+      !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
+    // A number is cached for 15 minutes; a failure for one, so a broken channel is not hammered.
+    await ioRedis.set(
+      key,
+      JSON.stringify(followers),
+      'EX',
+      isDevelopment ? 1 : followers === null ? 60 : 900
+    );
+    return followers;
   }
 
   getIntegrationsList(org: string) {

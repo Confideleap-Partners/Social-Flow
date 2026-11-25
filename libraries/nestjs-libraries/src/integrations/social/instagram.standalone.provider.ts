@@ -292,6 +292,14 @@ export class InstagramStandaloneProvider
     );
   }
 
+  async followers(id: string, accessToken: string) {
+    return instagramProvider.followersOf(
+      id,
+      accessToken,
+      'graph.instagram.com'
+    );
+  }
+
   async analytics(id: string, accessToken: string, date: number) {
     return instagramProvider.analytics(
       id,

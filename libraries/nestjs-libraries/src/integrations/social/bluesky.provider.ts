@@ -354,6 +354,16 @@ export class BlueskyProvider extends SocialAbstract implements SocialProvider {
     }
   }
 
+  async followers(
+    id: string,
+    accessToken: string,
+    integration: Integration
+  ): Promise<number | undefined> {
+    const agent = await this.getAgent(integration);
+    const { data } = await agent.getProfile({ actor: id });
+    return data.followersCount;
+  }
+
   private async getAgent(integration: Integration) {
     const body = JSON.parse(
       AuthService.fixedDecryption(integration.customInstanceDetails!)

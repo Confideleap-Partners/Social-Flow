@@ -980,6 +980,20 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     ];
   }
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const data = await (
+      await fetch(
+        `https://graph.facebook.com/v23.0/${id}?fields=followers_count,fan_count&access_token=${accessToken}`
+      )
+    ).json();
+
+    const followers = data?.followers_count ?? data?.fan_count;
+    return typeof followers === 'number' ? followers : undefined;
+  }
+
   async analytics(
     id: string,
     accessToken: string,

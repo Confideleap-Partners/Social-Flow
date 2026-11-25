@@ -942,6 +942,30 @@ export class TiktokBusinessProvider
     }
   }
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const data = await (
+      await this.fetch(
+        `${this.baseUrl}/business/get/?business_id=${encodeURIComponent(
+          id
+        )}&fields=${encodeURIComponent(JSON.stringify(['followers_count']))}`,
+        {
+          method: 'GET',
+          headers: {
+            'Access-Token': accessToken,
+          },
+        }
+      )
+    ).json();
+
+    this.throwIfTokenError(data);
+
+    const followers = data?.data?.followers_count;
+    return typeof followers === 'number' ? followers : undefined;
+  }
+
   async analytics(
     id: string,
     accessToken: string,

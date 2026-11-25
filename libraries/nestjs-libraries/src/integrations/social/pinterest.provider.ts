@@ -540,6 +540,25 @@ export class PinterestProvider
     }
   }
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const data = await (
+      await fetch('https://api.pinterest.com/v5/user_account', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      })
+    ).json();
+
+    return typeof data?.follower_count === 'number'
+      ? data.follower_count
+      : undefined;
+  }
+
   async analytics(
     id: string,
     accessToken: string,

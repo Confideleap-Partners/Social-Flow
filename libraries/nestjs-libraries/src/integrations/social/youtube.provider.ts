@@ -872,6 +872,27 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     }
   }
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    const { client, youtube } = clientAndYoutube();
+    client.setCredentials({ access_token: accessToken });
+
+    const { data } = await youtube(client).channels.list({
+      part: ['statistics'],
+      id: [id],
+    });
+
+    const statistics = data.items?.[0]?.statistics;
+    // A channel can hide its subscriber count.
+    if (!statistics || statistics.hiddenSubscriberCount) {
+      return undefined;
+    }
+
+    return statistics.subscriberCount ? +statistics.subscriberCount : undefined;
+  }
+
   async analytics(
     id: string,
     accessToken: string,

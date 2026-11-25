@@ -1455,6 +1455,26 @@ export class XProvider extends SocialAbstract implements SocialProvider {
     ];
   };
 
+  async followers(
+    id: string,
+    accessToken: string
+  ): Promise<number | undefined> {
+    if (process.env.DISABLE_X_ANALYTICS) {
+      return undefined;
+    }
+
+    const [accessTokenSplit, accessSecretSplit] = accessToken.split(':');
+    const client = new TwitterApi({
+      appKey: process.env.X_API_KEY!,
+      appSecret: process.env.X_API_SECRET!,
+      accessToken: accessTokenSplit,
+      accessSecret: accessSecretSplit,
+    });
+
+    const { data } = await client.v2.me({ 'user.fields': ['public_metrics'] });
+    return data.public_metrics?.followers_count;
+  }
+
   async analytics(
     id: string,
     accessToken: string,

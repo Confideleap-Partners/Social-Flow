@@ -184,6 +184,79 @@ export class IntegrationService {
     };
   }
 
+  /**
+   * What SocialFlow can do on a channel's network, read from what the provider implements, so it needs no per-provider code. Nine of
+   * the eleven providers that request OAuth scopes refuse to connect unless every requested scope was granted (checkScopes), so
+   * for them a connected channel has all the permissions its provider asks for.
+   */
+  getCapabilities(providerIdentifier: string) {
+    const provider = this._integrationManager.getSocialIntegration(providerIdentifier);
+
+    return {
+      publish: typeof provider?.post === 'function',
+      analytics: typeof provider?.analytics === 'function',
+      comments: typeof provider?.getComments === 'function',
+      followers: typeof provider?.followers === 'function',
+    };
+  }
+
+  /**
+   * The channel's current total number of followers, or null when the network does not give one or the call fails. Read-only: unlike
+   * checkAnalytics it never refreshes a token or disconnects a channel, so an expired channel simply has no number. Cached, because
+   * it is a live call to the network for a single number. Undefined means there is no such channel.
+   */
+  async getFollowers(
+    org: Organization,
+    integration: string
+  ): Promise<number | null | undefined> {
+    const getIntegration = await this.getIntegrationById(org.id, integration);
+
+    if (!getIntegration) {
+      return undefined;
+    }
+
+    const provider = this._integrationManager.getSocialIntegration(
+      getIntegration.providerIdentifier
+    );
+
+    if (
+      getIntegration.type !== 'social' ||
+      !provider?.followers ||
+      getIntegration.refreshNeeded ||
+      dayjs(getIntegration.tokenExpiration).isBefore(dayjs())
+    ) {
+      return null;
+    }
+
+    const key = `followers:${org.id}:${integration}`;
+    const cached = await ioRedis.get(key);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+
+    let followers: number | null = null;
+    try {
+      followers =
+        (await provider.followers(
+          getIntegration.internalId,
+          getIntegration.token
+        )) ?? null;
+    } catch (err) {
+      followers = null;
+    }
+
+    const isDevelopment =
+      !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
+    // A number is cached for 15 minutes; a failure for one, so a broken channel is not hammered.
+    await ioRedis.set(
+      key,
+      JSON.stringify(followers),
+      'EX',
+      isDevelopment ? 1 : followers === null ? 60 : 900
+    );
+    return followers;
+  }
+
   getIntegrationsList(org: string) {
     return this._integrationRepository.getIntegrationsList(org);
   }
